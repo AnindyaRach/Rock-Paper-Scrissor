@@ -1,0 +1,112 @@
+#mengimport semua library yang dibutuhkan untuk mengerjakan submission ini
+import tensorflow as tf
+from tensorflow.keras.optimizers import RMSprop
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+import numpy as np
+from google.colab import files
+from keras.preprocessing import image
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+
+!wget --no-check-certificate \
+https://dicodingacademy.blob.core.windows.net/picodiploma/ml_pemula_academy/rockpaperscissors.zip \
+  -O /tmp/rockpaperscissors.zip
+  
+#ekstrasi file zip dataset yang diberikan di halaman submission dicoding
+import zipfile,os
+local_zip = '/tmp/rockpaperscissors.zip'
+zip = zipfile.ZipFile(local_zip, 'r')
+zip.extractall('/tmp')
+zip.close()
+
+base_dir = '/tmp/rockpaperscissors/rps-cv-images'
+
+#Image_Augmentation
+datagenerator = ImageDataGenerator (
+    rotation_range=20,
+    rescale=1./225,
+    shear_range=0.2,
+    fill_mode='wrap',
+    validation_split = 0.4,
+    horizontal_flip = True)
+
+#Prepare_Data_Train_atau_Menyiapkan_Data_untuk_dilatih
+train_data = datagenerator.flow_from_directory(
+    base_dir,
+    target_size=(100,150),
+    shuffle = True,
+    subset = 'training')
+
+#Data_Validation
+valid_data = datagenerator.flow_from_directory(
+    base_dir,
+    target_size=(100,150),
+    shuffle = True,
+    subset = 'validation')
+    
+#define_model
+model_use = tf.keras.models.Sequential([
+    tf.keras.layers.Conv2D(16, (3,3), activation='relu', input_shape=(100, 150,3)),
+    tf.keras.layers.MaxPooling2D(2,2),
+    tf.keras.layers.Conv2D(32, (3,3), activation='relu'),
+    tf.keras.layers.MaxPooling2D(2,2),
+    tf.keras.layers.Conv2D(64, (3,3), activation='relu'),
+    tf.keras.layers.MaxPooling2D(2,2),
+    tf.keras.layers.Conv2D(128, (3,3), activation='relu'),
+    tf.keras.layers.MaxPooling2D(2,2),
+    tf.keras.layers.Flatten(),
+    tf.keras.layers.Dense(512, activation='relu'),
+    tf.keras.layers.Dense(1, activation='softmax')
+])
+
+#model compile
+model_use.compile(
+    optimizer=tf.optimizers.RMSprop(),
+    loss='categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+Accuracy_requested = 0.96
+Validation_Accuracy_requested = 0.9
+
+#Use callback for stabilize accuracy
+class useCallback(tf.keras.callbacks.Callback):
+  def on_epoch_end(self, epoch, logs={}):
+    if((logs.get('accuracy') >= Accuracy_requested) and (logs.get('val_accuracy') >= Validation_Accuracy_requested)):
+      print("\nReached Accuracy requested!\n")
+      self.model.stop_training = True
+
+use_callback = useCallback()
+
+model_use.fit(train_data,
+              epochs=25,
+              steps_per_epoch=20,
+              validation_data = valid_data,
+              verbose = 2,
+              validation_steps=3,
+              callbacks=[use_callback])
+              
+#upload images
+uploaded = files.upload()
+for fn in uploaded.keys():
+  #predicting images which uploaded
+  path = fn
+  img = image.load_img(path, target_size=(100,150))
+  imgplot = plt.imshow(img)
+  x = image.img_to_array(img)
+  x = np.expand_dims(x, axis=0)
+
+  images=np.vstack([x])
+  classes = model_use.predict(images, batch_size=10)
+
+  print(fn)
+  if classes[0][0]==1:
+    print('Paper')
+  elif classes [0][1]==1:
+    print('Rock')
+  elif classes [0][2]==1:
+    print('Scissors')
+  else:
+    print('Cant define')
+  plt.imshow(img)
+  plt.show()
